@@ -1,0 +1,49 @@
+name: Deploy Auth Gatekeeper
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/oauth.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Sync Auth to AKS
+    runs-on: ubuntu-latest
+    env:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+      NAMESPACE: auth # This acts as a fallback for the rollout check
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Inject Environment Variables
+        env:
+          # --- NAMES MUST MATCH THE ${VAR} IN YOUR YAML EXACTLY ---
+          NAMESPACE: ${{ vars.NAMESPACE || 'auth' }} 
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+          OAUTH_COOKIE_KEY: ${{ secrets.OAUTH_COOKIE_KEY }}
+          OAUTH_ORG_NAME: ${{ vars.OAUTH_ORG_NAME }}
+          OAUTH_TEAM_NAME: ${{ vars.OAUTH_TEAM_NAME }}
+          OAUTH2_PROXY_COOKIE_DOMAINS: ${{ vars.OAUTH2_PROXY_COOKIE_DOMAINS }}
+          OAUTH2_PROXY_WHITELIST_DOMAINS: ${{ vars.OAUTH2_PROXY_WHITELIST_DOMAINS }}
+        run: |
+          envsubst < src/oauth.yaml > src/oauth_hydrated.yaml
+
+      - name: Apply Manifests to AKS
+        uses: actions-hub/kubectl@v1.35.0
+        with:
+          # We don't strictly need -n here if it's in the YAML, but it doesn't hurt
+          args: apply -f src/oauth_hydrated.yaml
+
+      - name: Verify Rollout Status
+        uses: actions-hub/kubectl@v1.35.0
+        with:
+          # Fix: Match the 'name: github-oauth' from your YAML
+          args: rollout status deployment/github-oauth -n ${{ env.NAMESPACE }}
+
+      - name: Clean Up Temp Files
+        run: rm src/oauth_hydrated.yaml
