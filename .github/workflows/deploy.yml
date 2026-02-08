@@ -43,7 +43,14 @@ jobs:
         uses: actions-hub/kubectl@v1.35.0
         with:
           # Fix: Match the 'name: github-oauth' from your YAML
-          args: rollout status deployment/github-oauth -n ${{ env.NAMESPACE }}
+          args: rollout status deployment/github-oauth -n ${{ env.NAMESPACE }} --timeout=90s
+      
+      # This step ONLY runs if the rollout fails
+      - name: Dump Logs on Failure
+        if: failure()
+        uses: actions-hub/kubectl@v1.35.0
+        with:
+          args: logs -l app=github-oauth -n ${{ env.NAMESPACE }} --tail=20
 
       - name: Clean Up Temp Files
         run: rm src/oauth_hydrated.yaml
