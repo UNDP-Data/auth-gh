@@ -34,10 +34,10 @@ spec:
         image: quay.io/oauth2-proxy/oauth2-proxy:latest
         resources:
           requests:
-            cpu: "200m"
-            memory: "128Mi"
+            cpu: "100m"
+            memory: "64Mi"
           limits:
-            cpu: "500m"
+            cpu: "300m"
             memory: "256Mi"
         env:
         - name: OAUTH2_PROXY_PROVIDER
@@ -72,16 +72,24 @@ spec:
         - name: OAUTH2_PROXY_COOKIE_SECURE
           value: "true"
         - name: OAUTH2_PROXY_EMAIL_DOMAINS
-          value: "*"
+          value: "${OAUTH2_PROXY_EMAIL_DOMAINS}"
         - name: OAUTH2_PROXY_REDIRECT_URL
-          value: "https://auth.undpgeohub.org/oauth2/callback"
+          value: "https://${AUTH_SUBDOMAIN}.${BASE_DOMAIN}/oauth2/callback"
         - name: OAUTH2_PROXY_SCOPE
-          value: "user:email,read:org"
+          value: "user:email,read:org,repo"
         - name: OAUTH2_PROXY_REVERSE_PROXY
           value: "true"
         - name: OAUTH2_PROXY_SET_XAUTHREQUEST
           value: "true"
         - name: OAUTH2_PROXY_PASS_USER_HEADERS
+          value: "true"
+        - name: OAUTH2_PROXY_VERBOSE
+          value: "true"
+        - name: OAUTH2_PROXY_LOGGER_JSON
+          value: "false"
+        - name: OAUTH2_PROXY_SET_AUTHORIZATION_HEADER
+          value: "true"
+        - name: OAUTH2_PROXY_PASS_ACCESS_TOKEN
           value: "true"
 ---
 apiVersion: v1
@@ -98,30 +106,21 @@ spec:
   selector:
     app: github-oauth
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
 metadata:
-  name: github-oauth-ingress
+  name: github-oauth-route
   namespace: "${NAMESPACE}"
-  annotations:
-    kubernetes.io/ingress.class: addon-http-application-routing
-    cert-manager.io/cluster-issuer: zerossl 
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 spec:
-  tls:
-    - hosts:
-        - auth.undpgeohub.org
-      secretName: auth-cert
+  parentRefs:
+    - name: cluster-gateway
+      namespace: default
+  hostnames:
+    - "${AUTH_SUBDOMAIN}.${BASE_DOMAIN}"
   rules:
-    - host: auth.undpgeohub.org
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: github-oauth-svc
-                port:
-                  number: 4180
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: github-oauth-svc
+          namespace: "${NAMESPACE}"
+          port: 4180
