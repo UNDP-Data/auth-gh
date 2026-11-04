@@ -1,20 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# 1. Load variables from .env
-if [ -f .env ]; then
-    export $(cat .env | xargs)
-else
-    echo ".env file not found!"
-    exit 1
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+PRODCERT_DIR="${SCRIPT_DIR}/prodcert"
+
+if [ ! -f "${SCRIPT_DIR}/.env" ]; then
+  echo "Error: Missing ${SCRIPT_DIR}/.env file." >&2
+  exit 1
 fi
 
+# Load static variables from .env
+set -a
+source "${SCRIPT_DIR}/.env"
+set +a
 
-# 2. Use envsubst to inject variables into the manifest
-# 3. Pipe the result directly to kubectl
-envsubst < oauth.yaml | kubectl apply -f -
+echo "==> [oauth] Applying OAuth proxy configuration for ${AUTH_SUBDOMAIN}.${BASE_DOMAIN}..."
+envsubst < "${SCRIPT_DIR}/oauth.yaml" | kubectl apply -f -
 
-#echo "Deployment complete. Checking secret..."
-kubectl get secret github-oauth-creds -n auth
-
-# delete 
-#kubectl delete -f 01-auth.yaml
+echo "==> [oauth] Verifying secret creation..."
+kubectl get secret github-oauth-creds -n "${NAMESPACE}"
